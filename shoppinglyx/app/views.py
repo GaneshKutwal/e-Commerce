@@ -10,17 +10,25 @@ from django.utils.decorators import method_decorator
 
 class ProductView(View):
  def get(self,request):
+  totolItems = 0      
   topwear = Product.objects.filter(category="TW")
   bottomwear = Product.objects.filter(category="BW")
   mobiles = Product.objects.filter(category="M")
-
-  return render(request,'app/home.html',{"topwear":topwear,"bottomwear":bottomwear,"mobiles":mobiles})
+  if request.user.is_authenticated:
+        totolItems = len(Cart.objects.filter(user=request.user))
+  return render(request,'app/home.html',{"topwear":topwear,"bottomwear":bottomwear,"mobiles":mobiles,"totolItems":totolItems})
  
 
 class ProductDetailsView(View):
  def get(self, request, pk):
+  totolItems = 0
   product=Product.objects.get(pk=pk)
-  return render(request,'app/productdetail.html',{'product':product})
+  item_already_in_cart = False
+  
+  if request.user.is_authenticated:    
+    totolItems = len(Cart.objects.filter(user=request.user))
+    item_already_in_cart = Cart.objects.filter(Q(product=product.id) & Q(user=request.user)).exists()
+  return render(request,'app/productdetail.html',{'product':product,"item_already_in_cart":item_already_in_cart,"totolItems":totolItems})
 
 @login_required
 def add_to_cart(request):
@@ -33,16 +41,20 @@ def add_to_cart(request):
 @login_required
 def show_cart(request):
  if request.user.is_authenticated:
+  totolItems = 0
   user = request.user
   cartItems = Cart.objects.filter(user=user)
   productAmount = 0.0
   shippingCharges = 70.0
   totalAmount = 0.0
+  if request.user.is_authenticated:
+    totolItems = len(Cart.objects.filter(user=request.user))
   if cartItems:
    for item in cartItems:
     productAmount += (item.quantity * item.product.discounted_price)
    totalAmount = productAmount + shippingCharges
-   return render(request, 'app/addtocart.html',{'cartItems':cartItems,'productAmount':productAmount,'totalAmount':totalAmount})
+  
+   return render(request, 'app/addtocart.html',{'cartItems':cartItems,'productAmount':productAmount,'totalAmount':totalAmount,"totolItems":totolItems})
   else:
    return render(request,'app/emptycart.html')
 
@@ -132,13 +144,19 @@ def buy_now(request):
 
 @login_required
 def address(request):
+ totolItems = 0
+ if request.user.is_authenticated:    
+  totolItems = len(Cart.objects.filter(user=request.user))
  addr = Customer.objects.filter(user=request.user)
- return render(request, 'app/address.html',{'addr':addr})
+ return render(request, 'app/address.html',{'addr':addr,"totolItems":totolItems})
 
 @login_required
 def orders(request):
+ totolItems = 0
+ if request.user.is_authenticated:
+  totolItems = len(Cart.objects.filter(user=request.user))
  op = OrderPlaced.objects.filter(user=request.user)
- return render(request, 'app/orders.html',{'orderPlaced':op})
+ return render(request, 'app/orders.html',{'orderPlaced':op,"totolItems":totolItems})
 
 
 def mobile(request,data=None):
@@ -150,7 +168,10 @@ def mobile(request,data=None):
   mobiles = Product.objects.filter(category='M').filter(discounted_price__lt=20000)
  elif data == 'above':
   mobiles = Product.objects.filter(category='M').filter(discounted_price__gt=20000)
- return render(request, 'app/mobile.html',{'mobiles':mobiles})
+ totolItems = 0
+ if request.user.is_authenticated:
+  totolItems = len(Cart.objects.filter(user=request.user))
+ return render(request, 'app/mobile.html',{'mobiles':mobiles,"totolItems":totolItems})
 
 
 
@@ -171,10 +192,14 @@ def checkout(request):
  user = request.user
  add = Customer.objects.filter(user=user)
  cartitems = Cart.objects.filter(user=user)
+ totolItems = 0
+ if request.user.is_authenticated:
+  totolItems = len(Cart.objects.filter(user=request.user))
  if cartitems:
   amount = sum([item.quantity * item.product.discounted_price for item in cartitems])
   totalAmount = amount + 70
- return render(request, 'app/checkout.html',{'add':add,'totalAmount':totalAmount,'cartItems':cartitems})
+
+ return render(request, 'app/checkout.html',{'add':add,'totalAmount':totalAmount,'cartItems':cartitems,"totolItems":totolItems})
 
 @login_required
 def payment_done(request): 
@@ -182,6 +207,7 @@ def payment_done(request):
  custid = request.GET.get('custid')
  customer = Customer.objects.get(id=custid)
  carts = Cart.objects.filter(user=user)
+ 
  for cart in carts:
   OrderPlaced(user=user,customer=customer,product=cart.product,quantity=cart.quantity).save()
   cart.delete()
